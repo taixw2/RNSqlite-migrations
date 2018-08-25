@@ -1,54 +1,19 @@
 import SQLite from "react-native-sqlite-storage";
-import Table from 'rn-sqlite-table';
+import Table, { Const } from 'rn-sqlite-table';
+import { log } from './utils';
+
+type VersionInfo = { version: number, name: string, statement: string };
 
 const TABLE_NAME = 'migration_version';
 export default class Miration {
+  public version = '0.0.3'
+  private table  = Table(TABLE_NAME);
+
   constructor(
     private db: SQLite.SQLiteDatabase,
-    private bundleContent: string | Array<{ version: number, name: string, statement: string }>
+    private bundleContent: string | Array<VersionInfo>,
+    private DEBUGG: boolean = false
   ) { }
-
-  private table = Table(TABLE_NAME);
-  private createMirationTable(tx: SQLite.Transaction) {
-    return new Promise(
-      (resolve, reject) => {
-        this.db.executeSql(
-          `CREATE TABLE IF NOT EXISTS \`${TABLE_NAME}\` (\`version\` INTEGER NOT NULL PRIMARY KEY)`,
-          [],
-          resolve,
-          reject
-        );
-      }
-    )
-  }
-
-  private getCurrentVersion(tx: SQLite.Transaction) {
-    try {
-      const stmtInfo = this.table.select('version').query()
-      return new Promise(
-        (resolve, reject) => {
-          tx.executeSql(stmtInfo.stmt, [],
-            (_, result) => {
-              resolve(result.rows.item(0).version)
-            },
-            reject
-          )
-        }
-      )
-    } catch (error) {
-      console.error('get current version fail', error);
-      return Promise.resolve({})
-    }
-  }
-
-  private updateVersion(version: number) {
-    const stmtInfo = this.table.update({ version }).query();
-    this.db.transaction(
-      (tx) => {
-        tx.executeSql(stmtInfo.stmt, stmtInfo.value)
-      }
-    )
-  }
 
   private getMigrationData() {
     if (typeof this.bundleContent === 'string') {
@@ -57,49 +22,95 @@ export default class Miration {
         if (Array.isArray(data)) {
           return data;
         }
-        console.warn('bundleContent is not a array', data);
+        log('warn', 'bundleContent is not a array', data);
         return [];
       } catch (error) {
-        console.error('bundleContent parse error', error);
+        log('error', 'bundleContent parse error', error);
         return [];
       }
     }
-
     if (Array.isArray(this.bundleContent)) {
       return this.bundleContent;
     }
-    console.warn('bundle content invalid');
     return [];
   }
 
-  async transaction(success?: SQLite.TransactionCallback): Promise<SQLite.Transaction> {
-    return (new Promise(
-      (resolve, reject) => {
-        this.db.transaction(
-          tx => resolve(tx),
-          reject,
-          success
-        )
-      }
-    )) as Promise<SQLite.Transaction>
+  private createMirationTable(tx: SQLite.Transaction) {
+    tx.executeSql(
+      `CREATE TABLE IF NOT EXISTS \`${TABLE_NAME}\` (\`version\` INTEGER NOT NULL PRIMARY KEY)`,
+      [],
+    )
   }
 
+  private getMigrationTableData(): Promise<any> {
+    const stmtInfo = this.table.select('version').query()
+    log('info', 'will get current version')
+    return new Promise(
+      (resolve, reject) => {
+        this.db.executeSql(
+          stmtInfo.stmt, [], (result) => resolve(result as any), reject
+        )
+      }
+    )
+  }
+
+  private async updateVersion(version: number) {
+    const stmtInfo = this.table.insert({ version }, Const.WriteAction.REPLACE).query();
+    return await this.transaction(
+      (tx) => {
+        tx.executeSql(stmtInfo.stmt, stmtInfo.value)
+      }
+    )
+  }
+
+  private async transaction(txCallback: (tx: SQLite.Transaction) => void) {
+    return new Promise(
+      (resolve, reject) => {
+        this.db.transaction(
+          txCallback,
+          reject,
+          resolve,
+        )
+      }
+    )
+  }
+
+  // 流程：
+  // 创建版本表，如果不存在
+  // 获取当前最新版本号
+  // 获取需要更新的语句
+  // 过滤已经更新过的语句(通过版本号对比)
+  // 对语句根据版本号排序
+  // 事务执行
   async update() {
-    const ctx = await this.transaction()
-    await this.createMirationTable(ctx);
-    const gtx = await this.transaction()
-    const currentVersion = await this.getCurrentVersion(gtx)
-    if (typeof currentVersion === 'undefined') { return; }
+    try {
+      // 当前版本信息
+      await this.transaction((tx) => this.createMirationTable(tx));
+      const { rows } = await this.getMigrationTableData();
+      const item = rows.length ? rows.item(0) : { version: 0 }
+      const currentVersion = item.version;
+      log('info', 'currentVersion', currentVersion, rows.item(0));
 
-    const mirgationData = this.getMigrationData()
-    const filterMirgationData = mirgationData.filter(({ version }) => version > currentVersion)
-    const sortMirgationData = filterMirgationData.sort((cur, next) => cur.version - next.version)
-
-    const etx = await this.transaction(
-      () => { this.updateVersion(sortMirgationData[sortMirgationData.length - 1].version) }
-    )
-    sortMirgationData.forEach(
-      (statementInfo) => etx.executeSql(statementInfo.statement)
-    )
+      // 升级数据
+      const mirgationData = this.getMigrationData()
+      const filterMirgationData = mirgationData.filter(({ version }) => version > currentVersion)
+      const sortMirgationData = filterMirgationData.sort((cur, next) => cur.version - next.version)
+      log('info', 'sortMirgationData count', sortMirgationData.length);
+      if (!sortMirgationData.length) { return; }
+  
+      // 执行事务
+      await this.transaction(
+        (tx) => {
+          sortMirgationData.forEach(
+            (versionInfo: VersionInfo) => {
+              tx.executeSql(versionInfo.statement)
+            }
+          )
+        }
+      );
+      log('info', 'migration complete', 'count: ', mirgationData.length, 'reality：', sortMirgationData.length);
+    } catch (error) {
+      log('error', 'error', error)
+    }
   }
 }
