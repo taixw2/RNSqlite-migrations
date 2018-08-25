@@ -9,29 +9,45 @@ export default class Miration {
   ) { }
 
   private table = Table(TABLE_NAME);
-  private createMirationTable() {
-    return this.db.executeSql(
-      `CREATE TABLE IF NOT EXISTS \`${TABLE_NAME}\` (\`version\` INTEGER NOT NULL PRIMARY KEY)`
-    );
+  private createMirationTable(tx: SQLite.Transaction) {
+    return new Promise(
+      (resolve, reject) => {
+        this.db.executeSql(
+          `CREATE TABLE IF NOT EXISTS \`${TABLE_NAME}\` (\`version\` INTEGER NOT NULL PRIMARY KEY)`,
+          [],
+          resolve,
+          reject
+        );
+      }
+    )
   }
 
-  private async getCurrentVersion() {
+  private getCurrentVersion(tx: SQLite.Transaction) {
     try {
       const stmtInfo = this.table.select('version').query()
-      const result = await this.db.executeSql(stmtInfo.stmt)
-      return result[0].rows.item(0).version || 0
+      return new Promise(
+        (resolve, reject) => {
+          tx.executeSql(stmtInfo.stmt, [],
+            (_, result) => {
+              resolve(result.rows.item(0).version)
+            },
+            reject
+          )
+        }
+      )
     } catch (error) {
       console.error('get current version fail', error);
-      return {}
+      return Promise.resolve({})
     }
   }
 
   private updateVersion(version: number) {
     const stmtInfo = this.table.update({ version }).query();
-    return this.db.executeSql(
-      stmtInfo.stmt,
-      stmtInfo.value
-    );
+    this.db.transaction(
+      (tx) => {
+        tx.executeSql(stmtInfo.stmt, stmtInfo.value)
+      }
+    )
   }
 
   private getMigrationData() {
@@ -56,20 +72,34 @@ export default class Miration {
     return [];
   }
 
-  async update() {
-    await this.createMirationTable();
-    const currentVersion = await this.getCurrentVersion();
-    if (typeof currentVersion === 'undefined') { return; }
-    const needStatementInfo = this.getMigrationData().filter(({ version }) => version > currentVersion);
-    const sortStatement = needStatementInfo.sort((cur, next) => cur.version - next.version)
-    this.db.transaction(
-      (tx) => {
-        sortStatement.forEach(
-          (statementInfo) => {
-            tx.executeSql(statementInfo.statement)
-          }
+  async transaction(success?: SQLite.TransactionCallback): Promise<SQLite.Transaction> {
+    return (new Promise(
+      (resolve, reject) => {
+        this.db.transaction(
+          tx => resolve(tx),
+          reject,
+          success
         )
       }
+    )) as Promise<SQLite.Transaction>
+  }
+
+  async update() {
+    const ctx = await this.transaction()
+    await this.createMirationTable(ctx);
+    const gtx = await this.transaction()
+    const currentVersion = await this.getCurrentVersion(gtx)
+    if (typeof currentVersion === 'undefined') { return; }
+
+    const mirgationData = this.getMigrationData()
+    const filterMirgationData = mirgationData.filter(({ version }) => version > currentVersion)
+    const sortMirgationData = filterMirgationData.sort((cur, next) => cur.version - next.version)
+
+    const etx = await this.transaction(
+      () => { this.updateVersion(sortMirgationData[sortMirgationData.length - 1].version) }
+    )
+    sortMirgationData.forEach(
+      (statementInfo) => etx.executeSql(statementInfo.statement)
     )
   }
 }
