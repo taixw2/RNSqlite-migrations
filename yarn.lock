@@ -51,9 +51,9 @@ react-native-sqlite-storage@^3.3.6:
   dependencies:
     xcode "0.8.9"
 
-rn-sqlite-table@^0.0.2:
-  version "0.0.2"
-  resolved "http://registry.npm.taobao.org/rn-sqlite-table/download/rn-sqlite-table-0.0.2.tgz#5afa524e2c8f43a0f2fb74e31e06a8a6c77e276d"
+rn-sqlite-table@^0.0.4:
+  version "0.0.4"
+  resolved "http://registry.npm.taobao.org/rn-sqlite-table/download/rn-sqlite-table-0.0.4.tgz#c441cf381265b65b67faf419506841e9d14f4418"
   dependencies:
     "@types/jest" "^23.3.1"
 
