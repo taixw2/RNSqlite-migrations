@@ -1,12 +1,14 @@
 {
-  "name": "migration",
+  "name": "rn-sqlite-migration",
   "version": "0.0.1",
   "description": "一个 react native sqlite 的数据库升级助手",
   "main": "dist/index.js",
   "repository": "git@github.com:taixw2/RNSqlite-migrations.git",
   "author": "iqqq",
   "license": "MIT",
-  "bin": ".bin/migration.js",
+  "bin": {
+    "migration": ".bin/migration.js"
+  },
   "dependencies": {
     "react-native-sqlite-storage": "^3.3.6",
     "rn-sqlite-table": "^0.0.2"
