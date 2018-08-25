@@ -6,7 +6,7 @@ type VersionInfo = { version: number, name: string, statement: string };
 
 const TABLE_NAME = 'migration_version';
 export default class Miration {
-  public version = '0.0.3'
+  public version = '1.0.0'
   private table  = Table(TABLE_NAME);
 
   constructor(
