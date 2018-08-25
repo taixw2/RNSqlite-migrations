@@ -1,0 +1,6 @@
+node_modules/
+migration.bundle/
+dist/
+
+.npmignore
+*.log
