@@ -2,11 +2,11 @@ import SQLite from "react-native-sqlite-storage";
 import Table, { Const } from 'rn-sqlite-table';
 import { log } from './utils';
 
-type VersionInfo = { version: number, name: string, statement: string };
+type VersionInfo = { version: number, name: string, statement: string | string[] };
 
 const TABLE_NAME = 'migration_version';
 export default class Miration {
-  public version = '1.0.0'
+  public version = '1.0.1'
   private table  = Table(TABLE_NAME);
 
   constructor(
@@ -103,7 +103,13 @@ export default class Miration {
         (tx) => {
           sortMirgationData.forEach(
             (versionInfo: VersionInfo) => {
-              tx.executeSql(versionInfo.statement)
+              if (Array.isArray(versionInfo.statement)) {
+                versionInfo.statement.forEach(
+                  statement => tx.executeSql(statement)
+                );
+              } else {
+                tx.executeSql(versionInfo.statement)
+              }
             }
           )
         }

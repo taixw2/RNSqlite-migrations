@@ -16,7 +16,8 @@ npm install rn-sqlite-migration
 2. 在项目中创建一个目录 migration.bundle (目录名任意)
 3. 创建升级语句文件， 格式为： 版本号_描述, 如: 20381220200147_renameUser
 4. 输入升级语句： ALTER TABLE Uesr RENAME TO User;
-5. 执行命令生成对应的 JSON
+5. 使用 ___ (四根下划线分隔多条语句)
+6. 执行命令生成对应的 JSON
 ```
   yarn migration ./migration.bundle
 ```

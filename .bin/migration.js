@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const bundlePath = process.argv[2] || __dirname;
+const bundlePath = process.argv[2] || process.cwd();
 const mgtFileExp = /^\d+_\w+$/;
 
 fs.stat(
@@ -66,14 +66,14 @@ function getMigrationInfo(migrationFiles, callback) {
         state: 'pending',
         version: Number(fileMeta.version),
         name: fileMeta.name,
-        statement: '',
+        statement: [],
       }
       filesInfos.push(fileInfo);
       fs.readFile(
         filePath,
         function (error, content) {
           fileInfo.state = error ? 'reject' : 'resolve';
-          fileInfo.statement = content.toString().replace(/^\n+/, '').replace(/\n+$/, '');
+          fileInfo.statement = content.toString().split(/____+/).map(v => v.replace(/^\n+/, '').replace(/\n+$/, ''))
           const complete = filesInfos.every(function (fileInfo) {
             return fileInfo.state !== 'pending'
           })
@@ -105,8 +105,8 @@ function getMigrationFileMete(filePath) {
   const basename = path.basename(filePath, '.mgt');
   const splitInfo = basename.split('_');
   return {
-    version: splitInfo[0],
-    name: splitInfo[1]
+    version: splitInfo.shift(),
+    name: splitInfo.join('_')
   }
 }
 
